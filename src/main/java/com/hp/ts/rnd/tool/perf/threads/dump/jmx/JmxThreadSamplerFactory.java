@@ -1,0 +1,71 @@
+package com.hp.ts.rnd.tool.perf.threads.dump.jmx;
+
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
+import java.util.HashMap;
+import java.util.Map;
+
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
+
+import com.hp.ts.rnd.tool.perf.threads.sampling.ThreadSampler;
+import com.hp.ts.rnd.tool.perf.threads.sampling.ThreadSamplerFactory;
+import com.hp.ts.rnd.tool.perf.threads.sampling.ThreadSamplingException;
+
+public class JmxThreadSamplerFactory implements ThreadSamplerFactory {
+
+	private ThreadMXBean threadMBean;
+	private ThreadSampler sampler;
+	private JMXConnector connector;
+	private boolean ignoreSamplingThread = true;
+
+	public JmxThreadSamplerFactory() {
+		// current JVM
+		threadMBean = ManagementFactory.getThreadMXBean();
+	}
+
+	public JmxThreadSamplerFactory(JMXServiceURL jmxURL, String[] userInfo) throws IOException {
+		// remote JVM
+		Map<String, Object> env = new HashMap<String, Object>();
+		if (userInfo != null) {
+			env.put(JMXConnector.CREDENTIALS, userInfo);
+		}
+		connector = JMXConnectorFactory.connect(jmxURL, env);
+		threadMBean = ManagementFactory.newPlatformMXBeanProxy(
+				connector.getMBeanServerConnection(),
+				ManagementFactory.THREAD_MXBEAN_NAME, ThreadMXBean.class);
+	}
+
+
+	public boolean isIgnoreSamplingThread() {
+		return ignoreSamplingThread;
+	}
+
+	public void setIgnoreSamplingThread(boolean ignoreSamplingThread) {
+		this.ignoreSamplingThread = ignoreSamplingThread;
+	}
+	
+	@Override
+	public ThreadSampler getSampler() throws ThreadSamplingException {
+		if (sampler == null) {
+			sampler = new JmxThreadSampler(threadMBean, ignoreSamplingThread);
+		}
+		return sampler;
+	}
+
+	@Override
+	public void close() throws ThreadSamplingException {
+		sampler = null;
+		threadMBean = null;
+		if (connector != null) {
+			try {
+				connector.close();
+			} catch (IOException ignored) {
+			}
+			connector = null;
+		}
+	}
+
+}
